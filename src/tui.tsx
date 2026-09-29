@@ -143,6 +143,7 @@ export default Plugin.define({
 
     const meters = sharedMeters()
     const aggregateMeters = new Map<string, Meter>()
+    const aggregateViews = new Map<string, Display>()
     const [version, setVersion] = createSignal(0, { equals: false })
     let timer: ReturnType<typeof setInterval> | undefined
     /** Keeps the elapsed timer and held figures repainting while nothing streams. */
@@ -419,9 +420,9 @@ export default Plugin.define({
     const sessionUsage = (sessionID: string): SessionUsage | undefined =>
       context.data.session.get(sessionID) as SessionUsage | undefined
 
-    /** Sum only currently streaming descendants; family may also contain ancestors or siblings. */
+    /** Aggregate live descendant readings and retain the last combined view while idle. */
     const subagentDisplay = (sessionID: string, now: number): Display => {
-      return aggregateSubagentDisplay(
+      const current = aggregateSubagentDisplay(
         sessionID,
         context.data.session.family(sessionID),
         (id) => context.data.session.get(id)?.parentID,
@@ -431,6 +432,14 @@ export default Plugin.define({
         opts,
         labels,
       )
+      if (current.live) {
+        aggregateViews.set(sessionID, current)
+        return current
+      }
+      const held = aggregateViews.get(sessionID)
+      return held
+        ? { ...held, live: false, readings: held.readings.map((reading) => ({ ...reading, live: false })) }
+        : current
     }
 
     /**
@@ -574,7 +583,7 @@ export default Plugin.define({
       return runs
     }
 
-    const meterRuns = (view: Display, each: Meter, prefix = "Token Rate: "): Run[] => {
+    const meterRuns = (view: Display, each: Meter, prefix = "Token Rate: ", unit = "t/s"): Run[] => {
       const runs = [muted(prefix), ...gaugeFor(capInput(view, each))]
       view.readings.forEach((reading, index) => {
         const lead = index > 0 ? " · " : runs.length > 0 ? " " : ""
@@ -584,7 +593,7 @@ export default Plugin.define({
           dim: !reading.live,
         })
       })
-      runs.push(muted(" tok/s"))
+      runs.push(muted(` ${unit}`))
       return runs
     }
 
@@ -694,10 +703,10 @@ export default Plugin.define({
       })
       return (
         <box flexDirection="column" paddingLeft={2} paddingRight={2} gap={1}>
-          <text>tok/s</text>
+          <text>t/s</text>
           <text>
             {view()
-              ? `${view()!.readings.map((reading) => `${reading.label} ${formatRate(reading.tps)}`).join(" · ")} tok/s`
+              ? `${view()!.readings.map((reading) => `${reading.label} ${formatRate(reading.tps)}`).join(" · ")} t/s`
               : "idle"}
           </text>
           <text>

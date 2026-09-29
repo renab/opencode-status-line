@@ -49,7 +49,7 @@ function stream(
 describe("sliding rate", () => {
   test("converts streamed characters at the seed ratio", () => {
     const meter = createMeter()
-    const now = stream(meter, T0, 4_000, 100) // 100 chars/s = 25 tok/s
+    const now = stream(meter, T0, 4_000, 100) // 100 chars/s = 25 t/s
     const rate = liveRate(meter, now)
     expect(rate).toBeDefined()
     expect(Math.abs(rate! - 25)).toBeLessThan(1.5)
@@ -85,7 +85,11 @@ describe("aggregateSubagentDisplay", () => {
     }
     const now = T0 + 4_000
     const expectedSliding = liveRate(meters.get("childA")!, now)! + liveRate(meters.get("childB")!, now)! + liveRate(meters.get("grandchild")!, now)!
-    const expectedAverage = cumulativeRate(meters.get("childA")!, now)! + cumulativeRate(meters.get("childB")!, now)! + cumulativeRate(meters.get("grandchild")!, now)!
+    const expectedAverage = (
+      cumulativeRate(meters.get("childA")!, now)! +
+      cumulativeRate(meters.get("childB")!, now)! +
+      cumulativeRate(meters.get("grandchild")!, now)!
+    ) / 3
     const view = aggregateSubagentDisplay(
       "parent",
       ["parent", "childA", "childB", "grandchild", "sibling"],
@@ -124,6 +128,25 @@ describe("aggregateSubagentDisplay", () => {
     )
     expect(view.live).toBe(true)
     expect(view.primary).toBeCloseTo(liveRate(live, now)!, 5)
+  })
+
+  test("does not add held rates from sequential, now-idle descendants", () => {
+    const first = createMeter()
+    const second = createMeter()
+    stream(first, T0, 1_000, 100)
+    stream(second, T0 + 1_500, 1_000, 200)
+    const now = T0 + 10_000
+    const view = aggregateSubagentDisplay(
+      "parent",
+      ["first", "second"],
+      () => "parent",
+      (id) => (id === "first" ? first : second),
+      now,
+      ["sliding", "cumulative"],
+      OPTS,
+    )
+    expect(view.readings.map((reading) => reading.tps)).toEqual([0, 0])
+    expect(view.live).toBe(false)
   })
 })
 

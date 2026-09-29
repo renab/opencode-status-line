@@ -28,7 +28,7 @@ The plugin adds a row to OpenCode's terminal UI — one slot or several at once,
 each placement drawing the pieces you choose. A default line looks like this:
 
 ```
-Ctx: ██████▎····▏ 57% — 572.7k │ Cache Read: ⧉ 99.8% — 571.8k │ Codex Usage Remaining: 1w ███████··▏ 87% │ Token Rate: ████████▌·▏ ↯ 261 · μ 159 tok/s │ Session Time: 2h07m │ Git Status: +42 -7
+Ctx: ██████▎····▏ 57% — 572.7k │ Cache Read: ⧉ 99.8% — 571.8k │ Codex Usage Remaining: 1w ███████··▏ 87% │ Token Rate: ████████▌·▏ ↯ 261 · μ 159 t/s │ Session Time: 2h07m │ Git Status: +42 -7
 ```
 
 Reading it from left to right:
@@ -38,7 +38,7 @@ Reading it from left to right:
 | Context | `Ctx: ██████▎····▏ 57% — 572.7k` | How full the model's context window is, plus the token count |
 | Cache read | `Cache Read: ⧉ 99.8% — 571.8k` | How much of what the model read came from cache, plus the cached token count |
 | Codex quota | `Codex Usage Remaining: 1w ███████··▏ 87%` | Remaining quota for each limit window reported by the Codex usage plugin |
-| Token rate | `Token Rate: ████████▌·▏ ↯ 261 · μ 159 tok/s` | The gauge, the speed right now (`↯`), and the average for the turn (`μ`) |
+| Token rate | `Token Rate: ████████▌·▏ ↯ 261 · μ 159 t/s` | The gauge, the speed right now (`↯`), and the average for the turn (`μ`) |
 | Session time | `Session Time: 2h07m` | How long this session has been running |
 | Git status | `Git Status: +42 -7` | Lines added and removed in your working tree, not yet committed |
 | Cost | `$0.75` | What this session has spent so far (available as an optional segment) |
@@ -340,7 +340,7 @@ These keys control the `↯` reading:
 | --- | --- | --- | --- |
 | `cap.mode` | `"gauge"` | `"gauge"`, `"none"`, `"auto"` | Draw the gauge or not. `"auto"` is an old alias for `"gauge"` |
 | `cap.gaugeWidth` | `11` | 1–60 | How many cells wide the gauge is |
-| `cap.gaugeFloor` | `40` | 0–10000 | The gauge scale never drops below this speed (tok/s) |
+| `cap.gaugeFloor` | `40` | 0–10000 | The gauge scale never drops below this speed (t/s) |
 
 The gauge's top of scale is the fastest figure the session has reached so far,
 so a fast burst sets the scale and later slower output does not shrink it. The

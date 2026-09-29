@@ -15,7 +15,7 @@ speed, elapsed time and uncommitted changes in one configurable row.
 The line itself:
 
 ```
-Ctx: ███········▏ 26% — 262.0k │ Cache Read: ⧉ 99.6% — 260.9k │ Codex Usage Remaining: 1w ██████··▏ 75% │ Token Rate: ██████·····▏ ↯ 158 · μ 88 tok/s │ Session Time: 57m11s │ Git Status: +6 -1
+Ctx: ███········▏ 26% — 262.0k │ Cache Read: ⧉ 99.6% — 260.9k │ Codex Usage Remaining: 1w ██████··▏ 75% │ Token Rate: ██████·····▏ ↯ 158 · μ 88 t/s │ Session Time: 57m11s │ Git Status: +6 -1
 ```
 
 From left to right, the default line shows context window usage, cache reads,

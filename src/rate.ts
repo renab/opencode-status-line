@@ -206,7 +206,7 @@ export function liveRate(meter: Meter, now: number, opts: RateOptions = DEFAULT_
   return tps >= opts.minTps ? tps : undefined
 }
 
-/** Combine descendant displays using the same readings and labels as a session meter. */
+/** Combine live descendant readings, excluding stale values from non-concurrent agents. */
 export function aggregateSubagentDisplay(
   rootID: string,
   family: readonly string[],
@@ -217,7 +217,7 @@ export function aggregateSubagentDisplay(
   opts: RateOptions = DEFAULT_RATE,
   labels: UsageLabels = USAGE_LABELS.icons,
 ): Display {
-  const combined = new Map<Reading["key"], { label: string; liveTotal: number; settledTotal: number; live: boolean }>()
+  const combined = new Map<Reading["key"], { label: string; total: number; count: number }>()
   for (const sessionID of family) {
     if (sessionID === rootID) continue
     let parent = parentOf(sessionID)
@@ -235,17 +235,16 @@ export function aggregateSubagentDisplay(
     const meter = meterOf(sessionID)
     const view = meter ? display(meter, now, readings, opts, labels) : undefined
     for (const reading of view?.readings ?? []) {
+      if (!reading.live) continue
       const current = combined.get(reading.key)
       if (current) {
-        if (reading.live) current.liveTotal += reading.tps
-        else current.settledTotal += reading.tps
-        current.live ||= reading.live
+        current.total += reading.tps
+        current.count += 1
       } else {
         combined.set(reading.key, {
           label: reading.label,
-          liveTotal: reading.live ? reading.tps : 0,
-          settledTotal: reading.live ? 0 : reading.tps,
-          live: reading.live,
+          total: reading.tps,
+          count: 1,
         })
       }
     }
@@ -254,8 +253,11 @@ export function aggregateSubagentDisplay(
   const shown: Reading[] = [...combined].map(([key, value]) => ({
     key,
     label: value.label,
-    tps: value.live ? value.liveTotal : value.settledTotal,
-    live: value.live,
+    // Sliding rates add to represent combined current throughput. Turn
+    // averages are averaged across active agents; summing separate averages
+    // over different turn spans does not yield an aggregate average.
+    tps: key === "cumulative" ? value.total / value.count : value.total,
+    live: true,
   }))
   if (shown.length === 0) {
     const emptyReadings = readings.length > 0
