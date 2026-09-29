@@ -8,6 +8,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Labeled status-line sections and an optional Codex quota-remaining bar backed
+  by the `opencode-codex-usage` RPC; quota windows are shown only when the
+  service identifies their duration, including weekly-only accounts.
+
 ## [1.0.1] - 2026-09-29
 
 ### Fixed

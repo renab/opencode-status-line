@@ -366,6 +366,13 @@ describe("validation", () => {
     expect(read({ [PROJECT]: JSON.stringify({ diff: { refreshMs: 1_000 } }) }).config.diffRefreshMs).toBe(1_000)
   })
 
+  test("Codex quota is a known segment in the default labeled order", () => {
+    expect(DEFAULT_CONFIG.usageSegments).toEqual(["context", "cache", "codex", "meter", "time", "diff"])
+    const { config, warnings } = read({ [PROJECT]: JSON.stringify({ usage: { segments: ["codex"] } }) })
+    expect(config.usageSegments).toEqual(["codex"])
+    expect(warnings).toEqual([])
+  })
+
   test("a diff refresh interval below the floor warns and keeps the default", () => {
     const { config, warnings } = read({ [PROJECT]: JSON.stringify({ diff: { refreshMs: 10 } }) })
     expect(config.diffRefreshMs).toBe(DEFAULT_CONFIG.diffRefreshMs)

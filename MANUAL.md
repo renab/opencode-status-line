@@ -28,25 +28,29 @@ The plugin adds a row to OpenCode's terminal UI — one slot or several at once,
 each placement drawing the pieces you choose. A default line looks like this:
 
 ```
-██████▎····▏ 57% — 572.7k │ ⧉ 99.8% — 571.8k │ ████████▌·▏ ↯ 261 · μ 159 tok/s │ $0.75 │ 2h07m │ +42 -7
+Ctx: ██████▎····▏ 57% — 572.7k │ Cache Read: ⧉ 99.8% — 571.8k │ Codex Usage Remaining: 1w ███████··▏ 87% │ Token Rate: ████████▌·▏ ↯ 261 · μ 159 tok/s │ Session Time: 2h07m │ Git Status: +42 -7
 ```
 
 Reading it from left to right:
 
 | Piece | Example | What it tells you |
 | --- | --- | --- |
-| Context bar | `██████▎····▏ 57% — 572.7k` | How full the model's context window is, plus the token count |
-| Cache | `⧉ 99.8% — 571.8k` | How much of what the model read came from cache, plus the cached token count |
-| Speed meter | `████████▌·▏ ↯ 261 · μ 159 tok/s` | The gauge, the speed right now (`↯`), and the average for the turn (`μ`) |
-| Cost | `$0.75` | What this session has spent so far |
-| Time | `2h07m` | How long this session has been running |
-| Changes | `+42 -7` | Lines added and removed in your working tree, not yet committed |
-| Shells | `2 shells` | Commands OpenCode is running right now (only appears while they run) |
+| Context | `Ctx: ██████▎····▏ 57% — 572.7k` | How full the model's context window is, plus the token count |
+| Cache read | `Cache Read: ⧉ 99.8% — 571.8k` | How much of what the model read came from cache, plus the cached token count |
+| Codex quota | `Codex Usage Remaining: 1w ███████··▏ 87%` | Remaining quota for each limit window reported by the Codex usage plugin |
+| Token rate | `Token Rate: ████████▌·▏ ↯ 261 · μ 159 tok/s` | The gauge, the speed right now (`↯`), and the average for the turn (`μ`) |
+| Session time | `Session Time: 2h07m` | How long this session has been running |
+| Git status | `Git Status: +42 -7` | Lines added and removed in your working tree, not yet committed |
+| Cost | `$0.75` | What this session has spent so far (available as an optional segment) |
+| Shells | `2 shells` | Commands OpenCode is running right now (available as an optional segment) |
 
 A few useful details:
 
 - A piece with nothing to say hides itself, separator and all. A clean git
-  tree draws no `+/-` counter, a fresh session draws no cost, and so on.
+  tree reads `Git Status: clean`, a fresh session draws no cost, and so on.
+- Codex quota requires the separate `opencode-codex-usage` plugin. Only windows
+  whose duration is reported by that service are shown, so an account with only
+  a weekly limit does not get a fabricated 5-hour bar.
 - The shells count is clickable: click it to toggle OpenCode's composer, whose
   Shell tab lists the running commands and opens their output.
 - Old figures stay on screen in a lighter shade. That is how you tell "happening
@@ -96,8 +100,9 @@ Create `~/.config/opencode/opencode-status-line.json` with something like:
 }
 ```
 
-That changes the labels from glyphs to words, dresses the line in Catppuccin,
-and draws a wider speed gauge. The next sections explain every key you can use.
+That switches the cache and speed marks to their word-style forms, dresses the
+line in Catppuccin, and draws a wider speed gauge. The descriptive section
+prefixes stay visible either way. The next sections explain every key you can use.
 
 ### Install reminder
 
@@ -137,17 +142,18 @@ The names you can use:
 | Name | Draws | Hides itself when |
 | --- | --- | --- |
 | `shells` | `2 shells` | No shell commands are running |
-| `context` | Context bar, `%`, token count | Nothing is in the context window yet |
-| `cache` | `⧉ 99.8% — 571.8k` | Nothing has been read yet |
-| `meter` | Gauge and speed readings | No speed figure exists yet |
+| `context` | `Ctx:` context bar, `%`, token count | Nothing is in the context window yet |
+| `cache` | `Cache Read: ⧉ 99.8% — 571.8k` | Nothing has been read yet |
+| `codex` | `Codex Usage Remaining:` quota bars | Codex plugin is unavailable or no recognized window is reported |
+| `meter` | `Token Rate:` gauge and speed readings | No speed figure exists yet |
 | `cost` | `$0.75` | The session has cost nothing |
-| `time` | `2h07m` | The session start time is unknown |
-| `diff` | `+42 -7` | Your working tree is clean |
+| `time` | `Session Time: 2h07m` | The session start time is unknown |
+| `diff` | `Git Status: +42 -7` or `Git Status: clean` | The working tree has no reported changes |
 
-The default order is all seven:
+The default order is:
 
 ```json
-["shells", "context", "cache", "meter", "cost", "time", "diff"]
+["context", "cache", "codex", "meter", "time", "diff"]
 ```
 
 To remove a piece, leave it out. To move a piece, move its name in the list.
@@ -163,7 +169,7 @@ When [`surface`](#4-move-the-line-around) puts the line in more than one place,
 {
   "surface": ["app", "sidebar.footer"],
   "usage": {
-    "segments": ["context", "cache", "meter", "cost", "time", "diff"],
+    "segments": ["context", "cache", "codex", "meter", "time", "diff"],
     "surfaces": {
       "sidebar.footer": ["context", "meter"]
     }
@@ -559,7 +565,7 @@ Every key, its default, and the values it accepts. All keys are optional.
 
 | Key | Default | Accepts |
 | --- | --- | --- |
-| `usage.segments` | `["shells", "context", "cache", "meter", "cost", "time", "diff"]` | Any subset of those names, in any order |
+| `usage.segments` | `["context", "cache", "codex", "meter", "time", "diff"]` | Any subset of those names, in any order |
 | `usage.surfaces.<surface>` | `{}` | A map of surface name → segment list; a surface left out draws `usage.segments` |
 | `usage.labels` | `"icons"` | `"icons"` or `"words"` |
 | `usage.separator` | `" │ "` | A non-empty string of up to 8 characters |

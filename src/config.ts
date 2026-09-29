@@ -91,7 +91,7 @@ export function paddingFor(surface: Surface): Padding {
 export type SurfacePadding = Partial<Record<Surface, Partial<Padding>>>
 
 /** The pieces the usage line can draw, in whatever order the config asks. */
-export const USAGE_SEGMENTS = ["shells", "context", "cache", "meter", "cost", "time", "diff"] as const
+export const USAGE_SEGMENTS = ["shells", "context", "cache", "codex", "meter", "cost", "time", "diff"] as const
 export type UsageSegment = (typeof USAGE_SEGMENTS)[number]
 
 export type CapMode = CapStyle
@@ -173,7 +173,7 @@ export const DEFAULT_CONFIG: Config = {
   slowTps: 20,
   historySamples: DEFAULT_RATE.historySamples,
   statsWindowMs: 60_000,
-  usageSegments: [...USAGE_SEGMENTS],
+  usageSegments: ["context", "cache", "codex", "meter", "time", "diff"],
   surfaceSegments: {},
   labels: "icons",
   usageSeparator: " │ ",

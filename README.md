@@ -5,8 +5,8 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/rashidrazak/opencode-status-line/blob/main/LICENSE)
 
 A status line for [OpenCode](https://opencode.ai) v2's terminal UI. It shows
-context window usage, cache usage, streaming speed, cost, elapsed time and
-uncommitted changes in one configurable row.
+context window usage, cache usage, optional Codex quota remaining, streaming
+speed, elapsed time and uncommitted changes in one configurable row.
 
 <p align="center">
   <img src="assets/status-line.png" alt="A session with the status line at the bottom, showing context, cache, speed, cost, time and uncommitted changes" width="1080" />
@@ -15,12 +15,13 @@ uncommitted changes in one configurable row.
 The line itself:
 
 ```
-███········▏ 26% — 262.0k │ ⧉ 99.6% — 260.9k │ ██████·····▏ ↯ 158 · μ  88 tok/s │ +6 -1 │ $0.18 │ 57m11s
+Ctx: ███········▏ 26% — 262.0k │ Cache Read: ⧉ 99.6% — 260.9k │ Codex Usage Remaining: 1w ██████··▏ 75% │ Token Rate: ██████·····▏ ↯ 158 · μ 88 tok/s │ Session Time: 57m11s │ Git Status: +6 -1
 ```
 
-From left to right, the line shows context window usage, cache usage, current
-speed (`↯`) and turn average (`μ`) speed, uncommitted changes, session cost,
-and elapsed time. Segments with nothing to show are hidden.
+From left to right, the default line shows context window usage, cache reads,
+Codex quota windows (when `opencode-codex-usage` is installed), current speed
+(`↯`) and turn average (`μ`), session time and git status. Segments with
+nothing to show are hidden.
 
 ## What you get
 
@@ -29,6 +30,10 @@ and elapsed time. Segments with nothing to show are hidden.
   fills.
 - **Cache** (`⧉`): how much of the model's input came from cache, and the
   cached token count.
+- **Codex usage remaining**: remaining quota bars for the usage windows reported
+  by the optional [`opencode-codex-usage` plugin](https://github.com/jasonmit/opencode-codex-usage).
+  Window lengths come from the service response; weekly-only accounts show only
+  the weekly bar.
 - **Speed**: the current streaming speed (`↯`) and the average for the turn
   (`μ`). When a stream stops, the last reading stays on screen in a dimmed
   colour.

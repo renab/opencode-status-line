@@ -1,9 +1,9 @@
 /**
  * opencode-status-line — a live usage-and-speed status line for OpenCode's CLI
- * prompt footer: context window, cache, streaming speed, cost, elapsed time
- * and uncommitted changes in one row, drawn in one UI slot or several at once
- * (`surface`) and configurable per segment (`usage.segments`, overridable per
- * placement through `usage.surfaces`).
+ * prompt footer: context window, cache, Codex quota, streaming speed, cost,
+ * elapsed time and uncommitted changes in one row, drawn in one UI slot or
+ * several at once (`surface`) and configurable per segment (`usage.segments`,
+ * overridable per placement through `usage.surfaces`).
  *
  * The speed segment carries two live readings. OpenCode only learns exact token
  * counts when a step finishes, so the live figures are estimated from streamed
@@ -33,6 +33,7 @@
  */
 import { Plugin } from "@opencode/plugin/tui"
 import { For, Show, createMemo, createSignal } from "solid-js"
+import { CODEX_USAGE_RPC, codexQuotaReadings, type CodexQuotaSnapshot } from "./codex.ts"
 import { contextBarWidth, loadConfig, rateOptions, resolvedPadding, segmentsFor, sharesHostRow, stackFor, type Config, type Surface, type UsageSegment } from "./config.ts"
 import { diffDue, diffKey, diffParts, diffTotals, type DiffReading, type DiffStat, type StatusFile } from "./diff.ts"
 import { HOST_PALETTE, inkColor, resolvePalette } from "./palette.ts"
@@ -61,6 +62,9 @@ import { cacheShare, compact, contextUsed, duration, money, pressureTone, shells
 
 /** How often the line redraws while something is on screen. */
 const TICK_MS = 250
+/** Quota is account-wide and slow-moving; do not probe it on each repaint. */
+const CODEX_REFRESH_MS = 60_000
+const CODEX_BAR_WIDTH = 8
 
 /**
  * The per-session meters live on `globalThis`, not in `setup`. OpenCode
@@ -142,6 +146,39 @@ export default Plugin.define({
     const heartbeat = setInterval(() => setVersion((value) => value + 1), 1_000)
 
     const bump = () => setVersion((value) => value + 1)
+
+    let codexSnapshot: CodexQuotaSnapshot | undefined
+    let codexUpdatedAt = 0
+    let codexPending = false
+    let codexWarningShown = false
+
+    /** Read quota through the optional opencode-codex-usage server RPC. */
+    const refreshCodex = (now: number) => {
+      if (codexPending || now - codexUpdatedAt < CODEX_REFRESH_MS) return
+      codexPending = true
+      codexUpdatedAt = now
+      const rpc = context.client as unknown as {
+        rpc: (definition: typeof CODEX_USAGE_RPC) => { usage: (input: Record<string, never>) => Promise<unknown> }
+      }
+      void rpc
+        .rpc(CODEX_USAGE_RPC)
+        .usage({})
+        .then((snapshot) => {
+          codexSnapshot = snapshot as CodexQuotaSnapshot
+          bump()
+        })
+        .catch((error) => {
+          codexSnapshot = undefined
+          if (!codexWarningShown) {
+            codexWarningShown = true
+            console.warn("opencode-status-line: Codex quota refresh failed", error)
+          }
+          bump()
+        })
+        .finally(() => {
+          codexPending = false
+        })
+    }
 
     const meter = (sessionID: string): Meter => {
       let existing = meters.get(sessionID)
@@ -417,10 +454,11 @@ export default Plugin.define({
     const contextRuns = (tokens: TokenRecord | undefined, limit: number | undefined): Run[] => {
       const used = contextUsed(tokens)
       if (used <= 0) return []
-      if (limit === undefined) return [muted(compact(used))]
+      if (limit === undefined) return [muted(`Ctx: ${compact(used)}`)]
       const ratio = Math.min(1, used / limit)
       const tone = pressureTone(ratio, config.contextWarn / 100, config.contextDanger / 100)
       return [
+        muted("Ctx: "),
         ...contextBar(ratio, contextWidth, tone),
         { text: ` ${Math.round(ratio * 100)}%`, tone },
         muted(" — "),
@@ -432,6 +470,7 @@ export default Plugin.define({
       const share = cacheShare(tokens)
       if (share === undefined) return []
       return [
+        muted("Cache Read: "),
         muted(`${labels.cache} `),
         muted(`${(share * 100).toFixed(1)}%`),
         muted(" — "),
@@ -505,10 +544,12 @@ export default Plugin.define({
       }
     }
 
-    /** The `+12 -3` counter: additions green, deletions red, a clean tree silent. */
+    /** The `+12 -3` counter: additions green, deletions red, or an explicit clean label. */
     const diffRuns = (stat: DiffStat): Run[] => {
-      const runs: Run[] = []
-      for (const [index, part] of diffParts(stat).entries()) {
+      const parts = diffParts(stat)
+      if (parts.length === 0) return [muted("Git Status: clean")]
+      const runs: Run[] = [muted("Git Status: ")]
+      for (const [index, part] of parts.entries()) {
         if (index > 0) runs.push(muted(" "))
         runs.push({ text: part.text, tone: part.side === "added" ? "success" : "error" })
       }
@@ -516,7 +557,7 @@ export default Plugin.define({
     }
 
     const meterRuns = (view: Display, each: Meter): Run[] => {
-      const runs = gaugeFor(capInput(view, each))
+      const runs = [muted("Token Rate: "), ...gaugeFor(capInput(view, each))]
       view.readings.forEach((reading, index) => {
         const lead = index > 0 ? " · " : runs.length > 0 ? " " : ""
         runs.push({
@@ -529,6 +570,22 @@ export default Plugin.define({
       return runs
     }
 
+    const codexRuns = (snapshot: CodexQuotaSnapshot): Run[] => {
+      const readings = codexQuotaReadings(snapshot)
+      if (readings.length === 0) return []
+      const runs: Run[] = [muted("Codex Usage Remaining: ")]
+      for (const [index, reading] of readings.entries()) {
+        if (index > 0) runs.push(muted(" "))
+        const tone = pressureTone(reading.used / 100, config.contextWarn / 100, config.contextDanger / 100)
+        runs.push(
+          muted(`${reading.label} `),
+          ...contextBar(reading.remaining / 100, CODEX_BAR_WIDTH, tone),
+          { text: ` ${Math.round(reading.remaining)}%`, tone },
+        )
+      }
+      return runs
+    }
+
     const costRuns = (usage: SessionUsage | undefined): Run[] => {
       const cost = usage?.cost
       return typeof cost === "number" && cost > 0 ? [muted(money(cost))] : []
@@ -536,7 +593,7 @@ export default Plugin.define({
 
     const timeRuns = (usage: SessionUsage | undefined, now: number): Run[] => {
       const created = usage?.time?.created
-      return typeof created === "number" && created > 0 ? [muted(duration(now - created))] : []
+      return typeof created === "number" && created > 0 ? [muted(`Session Time: ${duration(now - created)}`)] : []
     }
 
     /**
@@ -556,6 +613,10 @@ export default Plugin.define({
         if (segment === "shells") part = shellRuns(sessionID)
         else if (segment === "context") part = contextRuns(window.tokens, limit)
         else if (segment === "cache") part = cacheRuns(window.tokens)
+        else if (segment === "codex") {
+          refreshCodex(now)
+          if (codexSnapshot) part = codexRuns(codexSnapshot)
+        }
         else if (segment === "meter") {
           const found = meters.get(sessionID)
           // A session with no meter has met this generation mid-history — a
