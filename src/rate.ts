@@ -206,16 +206,18 @@ export function liveRate(meter: Meter, now: number, opts: RateOptions = DEFAULT_
   return tps >= opts.minTps ? tps : undefined
 }
 
-/** Sum live sliding rates for descendants, excluding the root and its siblings. */
-export function aggregateSubagentRate(
+/** Combine descendant displays using the same readings and labels as a session meter. */
+export function aggregateSubagentDisplay(
   rootID: string,
   family: readonly string[],
   parentOf: (sessionID: string) => string | undefined,
   meterOf: (sessionID: string) => Meter | undefined,
   now: number,
+  readings: readonly LiveReading[] = ["sliding", "cumulative"],
   opts: RateOptions = DEFAULT_RATE,
-): number | undefined {
-  let total = 0
+  labels: UsageLabels = USAGE_LABELS.icons,
+): Display {
+  const combined = new Map<Reading["key"], { label: string; liveTotal: number; settledTotal: number; live: boolean }>()
   for (const sessionID of family) {
     if (sessionID === rootID) continue
     let parent = parentOf(sessionID)
@@ -231,10 +233,42 @@ export function aggregateSubagentRate(
     }
     if (!descendant) continue
     const meter = meterOf(sessionID)
-    const rate = meter ? liveRate(meter, now, opts) : undefined
-    if (rate !== undefined) total += rate
+    const view = meter ? display(meter, now, readings, opts, labels) : undefined
+    for (const reading of view?.readings ?? []) {
+      const current = combined.get(reading.key)
+      if (current) {
+        if (reading.live) current.liveTotal += reading.tps
+        else current.settledTotal += reading.tps
+        current.live ||= reading.live
+      } else {
+        combined.set(reading.key, {
+          label: reading.label,
+          liveTotal: reading.live ? reading.tps : 0,
+          settledTotal: reading.live ? 0 : reading.tps,
+          live: reading.live,
+        })
+      }
+    }
   }
-  return total > 0 ? total : undefined
+
+  const shown: Reading[] = [...combined].map(([key, value]) => ({
+    key,
+    label: value.label,
+    tps: value.live ? value.liveTotal : value.settledTotal,
+    live: value.live,
+  }))
+  if (shown.length === 0) {
+    const emptyReadings = readings.length > 0
+      ? readings.map((key): Reading => ({
+          key,
+          label: key === "sliding" ? labels.sliding : labels.average,
+          tps: 0,
+          live: false,
+        }))
+      : [{ key: "final" as const, label: labels.average, tps: 0, live: false }]
+    shown.push(...emptyReadings)
+  }
+  return { live: shown.some((reading) => reading.live), readings: shown, primary: shown[0]!.tps }
 }
 
 /**

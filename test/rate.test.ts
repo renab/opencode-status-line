@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   active,
-  aggregateSubagentRate,
+  aggregateSubagentDisplay,
   beginStep,
   beginTurn,
   createMeter,
@@ -64,8 +64,8 @@ describe("sliding rate", () => {
   })
 })
 
-describe("aggregateSubagentRate", () => {
-  test("sums live rates from descendants, including nested subagents only", () => {
+describe("aggregateSubagentDisplay", () => {
+  test("sums rate and average readings from descendants, including nested subagents only", () => {
     const parents: Record<string, string | undefined> = {
       parent: undefined,
       childA: "parent",
@@ -77,29 +77,53 @@ describe("aggregateSubagentRate", () => {
     for (const id of ["childA", "childB", "grandchild", "sibling"]) {
       const meter = createMeter()
       meters.set(id, meter)
+      beginStep(meter, id, T0, T0)
       const charsPerSecond = id === "childA" ? 100 : id === "childB" ? 200 : id === "grandchild" ? 300 : 1_000
       for (let elapsed = 0; elapsed < 4_000; elapsed += 100) {
         observe(meter, T0 + elapsed + 100, charsPerSecond / 10)
       }
     }
     const now = T0 + 4_000
-    const expected = liveRate(meters.get("childA")!, now)! + liveRate(meters.get("childB")!, now)! + liveRate(meters.get("grandchild")!, now)!
-    const total = aggregateSubagentRate(
+    const expectedSliding = liveRate(meters.get("childA")!, now)! + liveRate(meters.get("childB")!, now)! + liveRate(meters.get("grandchild")!, now)!
+    const expectedAverage = cumulativeRate(meters.get("childA")!, now)! + cumulativeRate(meters.get("childB")!, now)! + cumulativeRate(meters.get("grandchild")!, now)!
+    const view = aggregateSubagentDisplay(
       "parent",
       ["parent", "childA", "childB", "grandchild", "sibling"],
       (id) => parents[id],
       (id) => meters.get(id),
       now,
+      ["sliding", "cumulative"],
       OPTS,
     )
-    expect(total).toBeCloseTo(expected, 5)
+    expect(view.readings[0]!.key).toBe("sliding")
+    expect(view.readings[0]!.tps).toBeCloseTo(expectedSliding, 5)
+    expect(view.readings[1]!.key).toBe("cumulative")
+    expect(view.readings[1]!.tps).toBeCloseTo(expectedAverage, 5)
   })
 
-  test("does not include held or stale rates", () => {
-    const meter = createMeter()
-    stream(meter, T0, 1_000, 100)
-    const total = aggregateSubagentRate("parent", ["child"], () => "parent", () => meter, T0 + 8_000, OPTS)
-    expect(total).toBeUndefined()
+  test("shows zero readings when no descendant has a meter yet", () => {
+    const view = aggregateSubagentDisplay("parent", ["parent"], () => undefined, () => undefined, T0)
+    expect(view.readings.map((reading) => reading.tps)).toEqual([0, 0])
+    expect(view.live).toBe(false)
+  })
+
+  test("excludes a held child's rate while another child is live", () => {
+    const parents = { live: "parent", held: "parent" }
+    const held = createMeter()
+    const live = createMeter()
+    stream(held, T0, 1_000, 100)
+    const now = stream(live, T0 + 4_000, 1_000, 200)
+    const view = aggregateSubagentDisplay(
+      "parent",
+      ["live", "held"],
+      (id) => parents[id as keyof typeof parents],
+      (id) => ({ live, held })[id as "live" | "held"],
+      now,
+      ["sliding"],
+      OPTS,
+    )
+    expect(view.live).toBe(true)
+    expect(view.primary).toBeCloseTo(liveRate(live, now)!, 5)
   })
 })
 

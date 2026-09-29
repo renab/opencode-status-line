@@ -41,7 +41,7 @@ import { HOST_PALETTE, inkColor, resolvePalette } from "./palette.ts"
 import type { Display, Meter } from "./rate.ts"
 import {
   active,
-  aggregateSubagentRate,
+  aggregateSubagentDisplay,
   beginStep,
   beginTurn,
   createMeter,
@@ -142,6 +142,7 @@ export default Plugin.define({
     }
 
     const meters = sharedMeters()
+    const aggregateMeters = new Map<string, Meter>()
     const [version, setVersion] = createSignal(0, { equals: false })
     let timer: ReturnType<typeof setInterval> | undefined
     /** Keeps the elapsed timer and held figures repainting while nothing streams. */
@@ -419,14 +420,16 @@ export default Plugin.define({
       context.data.session.get(sessionID) as SessionUsage | undefined
 
     /** Sum only currently streaming descendants; family may also contain ancestors or siblings. */
-    const subagentRate = (sessionID: string, now: number): number | undefined => {
-      return aggregateSubagentRate(
+    const subagentDisplay = (sessionID: string, now: number): Display => {
+      return aggregateSubagentDisplay(
         sessionID,
         context.data.session.family(sessionID),
         (id) => context.data.session.get(id)?.parentID,
         (id) => meters.get(id),
         now,
+        config.readings,
         opts,
+        labels,
       )
     }
 
@@ -571,8 +574,8 @@ export default Plugin.define({
       return runs
     }
 
-    const meterRuns = (view: Display, each: Meter): Run[] => {
-      const runs = [muted("Token Rate: "), ...gaugeFor(capInput(view, each))]
+    const meterRuns = (view: Display, each: Meter, prefix = "Token Rate: "): Run[] => {
+      const runs = [muted(prefix), ...gaugeFor(capInput(view, each))]
       view.readings.forEach((reading, index) => {
         const lead = index > 0 ? " · " : runs.length > 0 ? " " : ""
         runs.push({
@@ -641,10 +644,14 @@ export default Plugin.define({
           const view = found ? display(found, now, config.readings, opts, labels) : undefined
           if (found && view) part = meterRuns(view, found)
         } else if (segment === "subagents") {
-          const rate = subagentRate(sessionID, now)
-          if (rate !== undefined) {
-            part = [muted("Subagents: "), { text: formatRate(rate), tone: speedTone(rate, config.fastTps, config.slowTps) }, muted(" tok/s")]
+          const view = subagentDisplay(sessionID, now)
+          let cap = aggregateMeters.get(sessionID)
+          if (!cap) {
+            cap = createMeter(opts)
+            aggregateMeters.set(sessionID, cap)
           }
+          notePeak(cap, view.primary)
+          part = meterRuns(view, cap, "Subagents: ")
         } else if (segment === "cost") part = costRuns(session)
         else if (segment === "time") part = timeRuns(session, now)
         else if (segment === "diff") {
