@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   active,
+  aggregateSubagentRate,
   beginStep,
   beginTurn,
   createMeter,
@@ -60,6 +61,45 @@ describe("sliding rate", () => {
     expect(liveRate(meter, now)).toBeDefined()
     expect(liveRate(meter, now + WINDOW + 1)).toBeUndefined()
     expect(active(meter, now + WINDOW + 1)).toBe(false)
+  })
+})
+
+describe("aggregateSubagentRate", () => {
+  test("sums live rates from descendants, including nested subagents only", () => {
+    const parents: Record<string, string | undefined> = {
+      parent: undefined,
+      childA: "parent",
+      childB: "parent",
+      grandchild: "childA",
+      sibling: "elsewhere",
+    }
+    const meters = new Map<string, Meter>()
+    for (const id of ["childA", "childB", "grandchild", "sibling"]) {
+      const meter = createMeter()
+      meters.set(id, meter)
+      const charsPerSecond = id === "childA" ? 100 : id === "childB" ? 200 : id === "grandchild" ? 300 : 1_000
+      for (let elapsed = 0; elapsed < 4_000; elapsed += 100) {
+        observe(meter, T0 + elapsed + 100, charsPerSecond / 10)
+      }
+    }
+    const now = T0 + 4_000
+    const expected = liveRate(meters.get("childA")!, now)! + liveRate(meters.get("childB")!, now)! + liveRate(meters.get("grandchild")!, now)!
+    const total = aggregateSubagentRate(
+      "parent",
+      ["parent", "childA", "childB", "grandchild", "sibling"],
+      (id) => parents[id],
+      (id) => meters.get(id),
+      now,
+      OPTS,
+    )
+    expect(total).toBeCloseTo(expected, 5)
+  })
+
+  test("does not include held or stale rates", () => {
+    const meter = createMeter()
+    stream(meter, T0, 1_000, 100)
+    const total = aggregateSubagentRate("parent", ["child"], () => "parent", () => meter, T0 + 8_000, OPTS)
+    expect(total).toBeUndefined()
   })
 })
 

@@ -41,6 +41,7 @@ import { HOST_PALETTE, inkColor, resolvePalette } from "./palette.ts"
 import type { Display, Meter } from "./rate.ts"
 import {
   active,
+  aggregateSubagentRate,
   beginStep,
   beginTurn,
   createMeter,
@@ -373,6 +374,7 @@ export default Plugin.define({
       // Cost, tokens and the context window live on the session record; any
       // update to it should repaint the usage line.
       context.data.on("session.usage.updated", safely(() => bump())),
+      context.data.on("session.created", safely(() => bump())),
       context.data.on("session.model.selected", safely(() => bump())),
     ]
 
@@ -415,6 +417,18 @@ export default Plugin.define({
 
     const sessionUsage = (sessionID: string): SessionUsage | undefined =>
       context.data.session.get(sessionID) as SessionUsage | undefined
+
+    /** Sum only currently streaming descendants; family may also contain ancestors or siblings. */
+    const subagentRate = (sessionID: string, now: number): number | undefined => {
+      return aggregateSubagentRate(
+        sessionID,
+        context.data.session.family(sessionID),
+        (id) => context.data.session.get(id)?.parentID,
+        (id) => meters.get(id),
+        now,
+        opts,
+      )
+    }
 
     /**
      * The window's occupant: the newest assistant message that has reported
@@ -626,6 +640,11 @@ export default Plugin.define({
           if (!found) void seedMeter(sessionID)
           const view = found ? display(found, now, config.readings, opts, labels) : undefined
           if (found && view) part = meterRuns(view, found)
+        } else if (segment === "subagents") {
+          const rate = subagentRate(sessionID, now)
+          if (rate !== undefined) {
+            part = [muted("Subagents: "), { text: formatRate(rate), tone: speedTone(rate, config.fastTps, config.slowTps) }, muted(" tok/s")]
+          }
         } else if (segment === "cost") part = costRuns(session)
         else if (segment === "time") part = timeRuns(session, now)
         else if (segment === "diff") {

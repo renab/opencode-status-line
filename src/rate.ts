@@ -206,6 +206,37 @@ export function liveRate(meter: Meter, now: number, opts: RateOptions = DEFAULT_
   return tps >= opts.minTps ? tps : undefined
 }
 
+/** Sum live sliding rates for descendants, excluding the root and its siblings. */
+export function aggregateSubagentRate(
+  rootID: string,
+  family: readonly string[],
+  parentOf: (sessionID: string) => string | undefined,
+  meterOf: (sessionID: string) => Meter | undefined,
+  now: number,
+  opts: RateOptions = DEFAULT_RATE,
+): number | undefined {
+  let total = 0
+  for (const sessionID of family) {
+    if (sessionID === rootID) continue
+    let parent = parentOf(sessionID)
+    const seen = new Set([sessionID])
+    let descendant = false
+    while (parent && !seen.has(parent)) {
+      if (parent === rootID) {
+        descendant = true
+        break
+      }
+      seen.add(parent)
+      parent = parentOf(parent)
+    }
+    if (!descendant) continue
+    const meter = meterOf(sessionID)
+    const rate = meter ? liveRate(meter, now, opts) : undefined
+    if (rate !== undefined) total += rate
+  }
+  return total > 0 ? total : undefined
+}
+
 /**
  * The cumulative average: every exact token of this turn's finished steps plus
  * the characters of the step in flight, over the decode time they took. With

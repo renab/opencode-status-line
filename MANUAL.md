@@ -153,7 +153,7 @@ The names you can use:
 The default order is:
 
 ```json
-["context", "cache", "codex", "meter", "time", "diff"]
+["context", "cache", "codex", "meter", "subagents", "time", "diff"]
 ```
 
 To remove a piece, leave it out. To move a piece, move its name in the list.
@@ -169,7 +169,7 @@ When [`surface`](#4-move-the-line-around) puts the line in more than one place,
 {
   "surface": ["app", "sidebar.footer"],
   "usage": {
-    "segments": ["context", "cache", "codex", "meter", "time", "diff"],
+    "segments": ["context", "cache", "codex", "meter", "subagents", "time", "diff"],
     "surfaces": {
       "sidebar.footer": ["context", "meter"]
     }
@@ -565,7 +565,7 @@ Every key, its default, and the values it accepts. All keys are optional.
 
 | Key | Default | Accepts |
 | --- | --- | --- |
-| `usage.segments` | `["context", "cache", "codex", "meter", "time", "diff"]` | Any subset of those names, in any order |
+| `usage.segments` | `["context", "cache", "codex", "meter", "subagents", "time", "diff"]` | Any subset of those names, in any order |
 | `usage.surfaces.<surface>` | `{}` | A map of surface name → segment list; a surface left out draws `usage.segments` |
 | `usage.labels` | `"icons"` | `"icons"` or `"words"` |
 | `usage.separator` | `" │ "` | A non-empty string of up to 8 characters |
